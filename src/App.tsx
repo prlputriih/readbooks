@@ -853,7 +853,7 @@ export default function App() {
                 </div>
                 
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-sans font-extrabold text-lit-charcoal tracking-tight leading-tight">
-                  Temukan <span className="text-lit-sage italic font-serif">Sahabat Membaca</span> Terbaikmu Hari Ini
+                  Temukan <span className="text-lit-sage italic font-serif">Bacaan</span><br />Terbaikmu Hari Ini
                 </h2>
                 
                 <p className="text-xs sm:text-sm text-slate-650 max-w-2xl mx-auto lg:mx-0 leading-relaxed">

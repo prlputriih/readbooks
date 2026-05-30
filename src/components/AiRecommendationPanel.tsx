@@ -122,7 +122,7 @@ export const AiRecommendationPanel: React.FC<AiRecommendationPanelProps> = ({
             Rekomendasi Cerdas
           </h4>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Butuh asisten mencari bacaan? Tulis topik, genre, atau suasana hati Anda di bawah, dan asisten Gemini kami akan mencarikan 3 buku nyata terbaik yang paling cocok dengan Anda.
+            Butuh asisten mencari bacaan? Tulis topik, genre, atau suasana hati Anda di bawah, dan kami akan mencarikan 3 buku terbaik yang paling cocok dengan Anda.
           </p>
         </div>
       </div>
