@@ -1,0 +1,210 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "Information about the registered user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "photoURL": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "userId",
+        "email",
+        "updatedAt"
+      ]
+    },
+    "customBook": {
+      "title": "Custom Book",
+      "description": "A book registered in the system by a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "rating": {
+          "type": "number"
+        },
+        "reviewsCount": {
+          "type": "number"
+        },
+        "reviews": {
+          "type": "array"
+        },
+        "duration": {
+          "type": "string"
+        },
+        "pages": {
+          "type": "number"
+        },
+        "coverColor": {
+          "type": "string"
+        },
+        "synopsis": {
+          "type": "string"
+        },
+        "buyUrl": {
+          "type": "string"
+        },
+        "isCustom": {
+          "type": "boolean"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "author",
+        "category",
+        "rating",
+        "reviewsCount",
+        "duration",
+        "pages",
+        "coverColor",
+        "synopsis",
+        "isCustom",
+        "createdBy"
+      ]
+    },
+    "readingListItem": {
+      "title": "Reading List Item",
+      "description": "A bookmark in the user's reading list.",
+      "type": "object",
+      "properties": {
+        "bookId": {
+          "type": "string"
+        },
+        "progressStatus": {
+          "type": "string",
+          "enum": [
+            "ingin_dibaca",
+            "sedang_dibaca",
+            "selesai"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        },
+        "savedAt": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bookId",
+        "progressStatus",
+        "savedAt",
+        "userId"
+      ]
+    },
+    "userNote": {
+      "title": "User Note",
+      "description": "User's scratchpad notes synchronized.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "updatedAt",
+        "userId"
+      ]
+    },
+    "review": {
+      "title": "Book Review",
+      "description": "User reviews for books.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "bookId": {
+          "type": "string"
+        },
+        "reviewerName": {
+          "type": "string"
+        },
+        "rating": {
+          "type": "number"
+        },
+        "comment": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "bookId",
+        "reviewerName",
+        "rating",
+        "comment",
+        "createdAt",
+        "userId"
+      ]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "user",
+      "description": "User profiles."
+    },
+    "users/{userId}/books/{bookId}": {
+      "schema": "customBook",
+      "description": "Custom books added by the user."
+    },
+    "users/{userId}/readingList/{bookId}": {
+      "schema": "readingListItem",
+      "description": "Reading progress tracking for a book."
+    },
+    "users/{userId}/notes/{noteId}": {
+      "schema": "userNote",
+      "description": "User notepad scratchpad document."
+    },
+    "reviews/{reviewId}": {
+      "schema": "review",
+      "description": "User review submissions."
+    }
+  }
+}

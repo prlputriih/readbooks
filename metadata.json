@@ -1,0 +1,8 @@
+{
+  "name": "readbooks",
+  "description": "Platform rekomendasi buku cerdas lengkap dengan fitur ulasan, penilaian rating, daftar bacaan pribadi, dan asisten rekomendasi AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
