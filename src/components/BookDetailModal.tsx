@@ -94,20 +94,17 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
   const formattedBuyUrl = book.buyUrl || `https://www.google.com/search?q=beli+buku+${encodeURIComponent(book.title)}+${encodeURIComponent(book.author)}`;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-10" role="dialog" aria-modal="true">
       {/* Dark overlay backdrop screen */}
       <div 
         onClick={onClose}
         className="fixed inset-0 bg-gray-900 bg-opacity-65 backdrop-blur-xs transition-opacity" 
       />
 
-      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        {/* Modal panel wrapper code */}
-        <div className="inline-block align-bottom bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full border border-lit-border animate-fade-in">
-          {/* Close Floating button */}
-          <div className="absolute top-5 right-5 z-10">
+      {/* Modal panel wrapper code */}
+      <div className="relative bg-white rounded-3xl text-left shadow-2xl transform transition-all w-full max-w-sm sm:max-w-xl md:max-w-3xl border border-lit-border animate-fade-in my-auto flex flex-col overflow-hidden max-h-[85vh] sm:max-h-[90vh]">
+        {/* Close Floating button */}
+        <div className="absolute top-5 right-5 z-10">
             <button 
               type="button"
               onClick={onClose}
@@ -117,7 +114,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
             </button>
           </div>
 
-          <div className="bg-white px-6 pt-8 pb-6 sm:p-8">
+          <div className="bg-white px-6 pt-8 pb-6 sm:p-8 overflow-y-auto flex-grow custom-scrollbar">
             <div className="sm:flex sm:items-start gap-8">
               
               {/* Dynamic Spine Book Mock on Left Side */}
@@ -175,7 +172,7 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
 
                 {/* Synopsis */}
                 <div>
-                  <h4 className="text-[10px] font-bold text-lit-sage uppercase tracking-wider mb-1.5 font-mono">Sinopsis Singkat</h4>
+                  <h4 className="text-[10px] font-bold text-lit-sage uppercase tracking-wider mb-1.5 font-mono">BLURB</h4>
                   <p className="text-sm text-slate-600 leading-relaxed font-sans bg-lit-cream p-3.5 rounded-xl border border-lit-border">
                     {book.synopsis || 'Sinopsis belum tersedia untuk ulasan ini.'}
                   </p>
@@ -345,6 +342,5 @@ export const BookDetailModal: React.FC<BookDetailModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
   );
 };

@@ -117,6 +117,14 @@
         "userId": {
           "type": "string",
           "description": "ID pemilik bookmark"
+        },
+        "currentPage": {
+          "type": "number",
+          "description": "Halaman terakhir yang dibaca pengguna"
+        },
+        "totalPages": {
+          "type": "number",
+          "description": "Total halaman buku untuk kalkulasi persentase"
         }
       },
       "required": ["bookId", "progressStatus", "savedAt", "userId"]

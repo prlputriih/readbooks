@@ -6,6 +6,7 @@ import { AiRecommendationPanel } from './components/AiRecommendationPanel';
 import { AddBookForm } from './components/AddBookForm';
 import { AuthModal } from './components/AuthModal';
 import { ShuffleModal } from './components/ShuffleModal';
+import { QuickAddTrackingForm } from './components/QuickAddTrackingForm';
 import { 
   BookOpen, 
   Compass, 
@@ -188,7 +189,7 @@ const SEED_BOOKS: Book[] = [
     pages: 478,
     coverColor: "bg-indigo-950",
     synopsis: "Karya realisme magis Indonesia yang diakui dunia internasional. Mengisahkan petaka dan keelokan nasib Dewi Ayu, seorang pelacur legendaris keturunan Belanda, dan anak-anak perempuannya yang dikutuk kecantikan luar biasa namun menyakitkan.",
-    buyUrl: "https://www.gramedia.com/products/cantik-itu-luka"
+    buyUrl: "https://www.gramedia.com/products/cantik-itu-luka-hc-limited-edition"
   },
   {
     id: 10,
@@ -412,6 +413,7 @@ export default function App() {
 
   // Reading bookmarks saved
   const [readingList, setReadingList] = useState<ReadingListItem[]>([]);
+  const [readingListFilter, setReadingListFilter] = useState<'semua' | 'ingin_dibaca' | 'sedang_dibaca' | 'selesai'>('semua');
 
   // Synchronize Reading List from Firestore live snapshot
   useEffect(() => {
@@ -579,7 +581,7 @@ export default function App() {
       }
     } else {
       setReadingList(prev => prev.map(item => {
-        if (item.bookId === bookId) {
+        if (String(item.bookId) === String(bookId)) {
           return { ...item, progressStatus: status };
         }
         return item;
@@ -587,6 +589,181 @@ export default function App() {
       if (targetBook) {
         triggerToast(`Status bacaan "${targetBook.title}" diubah menjadi: ${statusLabels[status]}.`);
       }
+    }
+  };
+
+  // Update book reading progress (page tracker)
+  const handleUpdateReadingProgress = async (bookId: number | string, currentPage: number, totalPages: number) => {
+    const targetBook = books.find(b => b.id === bookId);
+    const resolvedPages = Math.max(0, totalPages || (targetBook?.pages) || 0);
+    const resolvedCurrentPage = Math.max(0, Math.min(currentPage, resolvedPages || Infinity));
+    
+    // Check if the reading was marked as completed
+    const isCompleted = resolvedPages > 0 && resolvedCurrentPage >= resolvedPages;
+
+    if (currentUser) {
+      const docPath = `users/${currentUser.uid}/readingList/${bookId}`;
+      try {
+        const updatePayload: any = {
+          currentPage: resolvedCurrentPage,
+          totalPages: resolvedPages
+        };
+        
+        if (isCompleted) {
+          updatePayload.progressStatus = 'selesai';
+        } else if (resolvedCurrentPage > 0) {
+          const currentItem = readingList.find(i => i.bookId === String(bookId));
+          if (currentItem && currentItem.progressStatus === 'ingin_dibaca') {
+            updatePayload.progressStatus = 'sedang_dibaca';
+          }
+        }
+
+        await updateDoc(doc(db, `users/${currentUser.uid}/readingList`, String(bookId)), updatePayload);
+        
+        if (targetBook) {
+          if (isCompleted) {
+            triggerToast(`Selamat! Anda telah menyelesaikan membaca buku "${targetBook.title}"! 🎉📚`);
+          } else {
+            triggerToast(`Progres membaca "${targetBook.title}" diperbarui ke halaman ${resolvedCurrentPage}/${resolvedPages}! 📖`);
+          }
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, docPath);
+      }
+    } else {
+      setReadingList(prev => prev.map(item => {
+        if (String(item.bookId) === String(bookId)) {
+          const updatedItem = {
+            ...item,
+            currentPage: resolvedCurrentPage,
+            totalPages: resolvedPages
+          };
+          if (isCompleted) {
+            updatedItem.progressStatus = 'selesai';
+          } else if (resolvedCurrentPage > 0 && item.progressStatus === 'ingin_dibaca') {
+            updatedItem.progressStatus = 'sedang_dibaca';
+          }
+          return updatedItem;
+        }
+        return item;
+      }));
+      
+      if (targetBook) {
+        if (isCompleted) {
+          triggerToast(`Selamat! Anda telah menyelesaikan membaca buku "${targetBook.title}"! 🎉📚`);
+        } else {
+          triggerToast(`Progres membaca "${targetBook.title}" diperbarui ke halaman ${resolvedCurrentPage}/${resolvedPages}! 📖`);
+        }
+      }
+    }
+  };
+
+  // Add an existing book from catalog directly to the reading tracker
+  const handleAddSelectedBookToTrack = async (bookId: number | string, currentPage: number, totalPages: number) => {
+    const isBookmarked = readingList.some(item => String(item.bookId) === String(bookId));
+    const targetBook = books.find(b => b.id === bookId);
+    
+    // Determine progressStatus
+    const isCompleted = totalPages > 0 && currentPage >= totalPages;
+    const progressStatus = isCompleted ? 'selesai' : (currentPage > 0 ? 'sedang_dibaca' : 'ingin_dibaca');
+
+    if (currentUser) {
+      const docPath = `users/${currentUser.uid}/readingList/${bookId}`;
+      try {
+        if (isBookmarked) {
+          await handleUpdateReadingProgress(bookId, currentPage, totalPages);
+        } else {
+          const newBookmark: ReadingListItem = {
+            bookId: String(bookId),
+            progressStatus,
+            savedAt: new Date().toLocaleDateString('id-ID'),
+            userId: currentUser.uid,
+            currentPage,
+            totalPages
+          };
+          await setDoc(doc(db, `users/${currentUser.uid}/readingList`, String(bookId)), newBookmark);
+          if (targetBook) {
+            triggerToast(`Buku "${targetBook.title}" berhasil ditambahkan ke rencana pelacakan Anda! 📖`);
+          }
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, docPath);
+      }
+    } else {
+      if (isBookmarked) {
+        await handleUpdateReadingProgress(bookId, currentPage, totalPages);
+      } else {
+        const newBookmark: ReadingListItem = {
+          bookId: String(bookId),
+          progressStatus,
+          savedAt: new Date().toLocaleDateString('id-ID'),
+          currentPage,
+          totalPages
+        };
+        setReadingList(prev => [...prev, newBookmark]);
+        if (targetBook) {
+          triggerToast(`Buku "${targetBook.title}" berhasil ditambahkan ke rencana pelacakan Anda! (Lokal) 📖`);
+        }
+      }
+    }
+  };
+
+  // Add custom book to both catalog and the reading tracker in one go
+  const handleAddCustomBookToTrack = async (
+    title: string,
+    author: string,
+    category: string,
+    totalPages: number,
+    currentPage: number,
+    coverColor: string
+  ) => {
+    const newBookId = `track-custom-${Date.now()}`;
+    const newBook: Book = {
+      id: newBookId,
+      title,
+      author,
+      category,
+      rating: 0,
+      reviewsCount: 0,
+      reviews: [],
+      duration: '4 jam',
+      pages: totalPages,
+      coverColor,
+      synopsis: 'Buku buatan pengguna yang sedang dibaca dan dilacak saat ini.',
+      isCustom: true
+    };
+
+    // First register candidate into standard catalog
+    await handleAddNewBook(newBook);
+
+    // Second place into readingList with initial progress counters
+    const isCompleted = totalPages > 0 && currentPage >= totalPages;
+    const progressStatus = isCompleted ? 'selesai' : (currentPage > 0 ? 'sedang_dibaca' : 'ingin_dibaca');
+
+    if (currentUser) {
+      const docPath = `users/${currentUser.uid}/readingList/${newBookId}`;
+      try {
+        const newBookmark: ReadingListItem = {
+          bookId: newBookId,
+          progressStatus,
+          savedAt: new Date().toLocaleDateString('id-ID'),
+          userId: currentUser.uid,
+          currentPage,
+          totalPages
+        };
+        await setDoc(doc(db, `users/${currentUser.uid}/readingList`, newBookId), newBookmark);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, docPath);
+      }
+    } else {
+      const newBookmark: ReadingListItem = {
+        bookId: newBookId,
+        progressStatus,
+        savedAt: new Date().toLocaleDateString('id-ID'),
+        currentPage,
+        totalPages
+      };
+      setReadingList(prev => [...prev, newBookmark]);
     }
   };
 
@@ -641,14 +818,15 @@ export default function App() {
 
   // Bookmark stats aggregation
   const bookmarkStats = useMemo(() => {
-    const savedCount = readingList.length;
+    const wantToReadCount = readingList.filter(item => item.progressStatus === 'ingin_dibaca' || !item.progressStatus).length;
     const completedCount = readingList.filter(item => item.progressStatus === 'selesai').length;
     const readingNowCount = readingList.filter(item => item.progressStatus === 'sedang_dibaca').length;
 
     return {
-      total: savedCount,
+      wantToRead: wantToReadCount,
       completed: completedCount,
-      readingNow: readingNowCount
+      readingNow: readingNowCount,
+      total: readingList.length
     };
   }, [readingList]);
 
@@ -677,6 +855,17 @@ export default function App() {
     });
   }, [books, searchQuery, selectedCategory]);
 
+  // Reading list filtering calculation
+  const filteredReadingList = useMemo(() => {
+    return readingList.filter(item => {
+      if (readingListFilter === 'semua') return true;
+      if (readingListFilter === 'ingin_dibaca') {
+        return item.progressStatus === 'ingin_dibaca' || !item.progressStatus;
+      }
+      return item.progressStatus === readingListFilter;
+    });
+  }, [readingList, readingListFilter]);
+
   // Open the dedicated interactive shuffle modal
   const handleSurpriseRoll = () => {
     if (books.length === 0) {
@@ -699,7 +888,7 @@ export default function App() {
     <div className="font-sans antialiased min-h-screen flex flex-col bg-lit-parchment selection:bg-lit-sage/30 text-lit-charcoal">
       
       {/* Toast Notification Container HUD Overlay */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none" id="toasts-portal">
+      <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-5 sm:bottom-5 z-50 flex flex-col gap-2.5 max-w-sm w-auto sm:w-full pointer-events-none" id="toasts-portal">
         {toasts.map(t => (
           <div 
             key={t.id} 
@@ -730,43 +919,45 @@ export default function App() {
             {/* Platform Branding Logo */}
             <div 
               onClick={() => { setActiveTab('jelajah'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              className="flex items-center space-x-3 cursor-pointer group"
+              className="flex items-center space-x-2 sm:space-x-3 cursor-pointer group"
             >
-              <div className="w-9 h-9 bg-lit-sage rounded-lg flex items-center justify-center text-white shadow-sm transform group-hover:rotate-6 transition-transform">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-lit-sage rounded-lg flex items-center justify-center text-white shadow-sm transform group-hover:rotate-6 transition-transform">
                 <BookOpen className="w-4 h-4" />
               </div>
               <div>
-                <h1 className="text-lg font-bold font-serif text-lit-charcoal tracking-tight">ReadBooks</h1>
-                <p className="text-[9px] text-lit-sage tracking-wider font-semibold uppercase">Your Reading Compass</p>
+                <h1 className="text-base sm:text-lg font-bold font-serif text-lit-charcoal tracking-tight">ReadBooks</h1>
+                <p className="text-[9px] text-lit-sage tracking-wider font-semibold uppercase hidden sm:block">Your Reading Compass</p>
               </div>
             </div>
 
-            {/* Navigation Tabs (Desktop screen) */}
+            {/* Navigation Tabs (Responsive) */}
             <nav className="flex space-x-1 bg-lit-cream p-1 rounded-lg border border-lit-border">
               <button 
                 onClick={() => setActiveTab('jelajah')} 
-                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 cursor-pointer ${
+                className={`px-2.5 sm:px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1 sm:gap-1.5 cursor-pointer ${
                   activeTab === 'jelajah' 
                     ? 'bg-lit-sage text-white shadow-xs' 
                     : 'text-slate-600 hover:text-lit-charcoal'
                 }`}
               >
                 <Compass className="w-3.5 h-3.5" />
-                <span>Jelajah Buku</span>
+                <span className="hidden sm:inline">Jelajah Buku</span>
+                <span className="inline sm:hidden">Jelajah</span>
               </button>
               
               <button 
                 onClick={() => setActiveTab('bacaan')} 
-                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 relative cursor-pointer ${
+                className={`px-2.5 sm:px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1 sm:gap-1.5 relative cursor-pointer ${
                   activeTab === 'bacaan' 
                     ? 'bg-lit-sage text-white shadow-xs' 
                     : 'text-slate-600 hover:text-lit-charcoal'
                 }`}
               >
                 <Bookmark className="w-3.5 h-3.5" />
-                <span>Daftar Bacaan</span>
+                <span className="hidden sm:inline">Daftar Bacaan</span>
+                <span className="inline sm:hidden">Bacaan</span>
                 {readingList.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-lit-charcoal text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold border border-white">
+                  <span className="absolute -top-1 -right-1 bg-lit-charcoal text-white text-[8px] sm:text-[9px] w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full flex items-center justify-center font-bold border border-white">
                     {readingList.length}
                   </span>
                 )}
@@ -1103,7 +1294,7 @@ export default function App() {
                     <BookCard 
                       key={book.id}
                       book={book}
-                      isSaved={readingList.some(item => item.bookId === book.id)}
+                      isSaved={readingList.some(item => String(item.bookId) === String(book.id))}
                       onSelect={(b) => setSelectedBook(b)}
                       onToggleSave={(e, id) => handleToggleBookmark(e, id)}
                     />
@@ -1136,32 +1327,70 @@ export default function App() {
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               
-              {/* Left Column list view cards (Col span 8) */}
-              <div className="lg:col-span-8 space-y-6">
-                          {/* Statistics Box */}
-                <div className="bg-lit-cream rounded-xl p-5 border border-lit-border shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div>
-                    <h3 className="text-xl font-serif italic font-bold text-lit-charcoal">Daftar Bacaan Saya</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Kelola kemajuan dan ulas buku yang sedang Anda baca disini.</p>
+                {/* Left Column list view cards (Col span 8) */}
+                <div className="lg:col-span-8 space-y-6">
+                  {/* Statistics Box */}
+                  <div className="bg-lit-cream rounded-xl p-5 border border-lit-border shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                      <h3 className="text-xl font-serif italic font-bold text-lit-charcoal">Daftar Bacaan Saya</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Kelola kemajuan dan ulas buku yang sedang Anda baca disini.</p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Disimpan / Ingin Dibaca Tab Button */}
+                      <div 
+                        id="stat-box-disimpan"
+                        onClick={() => setReadingListFilter(readingListFilter === 'ingin_dibaca' ? 'semua' : 'ingin_dibaca')}
+                        title="Saring daftar: Buku Ingin Dibaca"
+                        className={`px-3.5 py-2 rounded-lg border text-center shrink-0 cursor-pointer transition-all select-none ${
+                          readingListFilter === 'ingin_dibaca'
+                            ? 'bg-amber-50 text-amber-950 border-amber-400 shadow-xs ring-2 ring-amber-450/20 font-bold'
+                            : 'bg-white border-lit-border text-slate-500 hover:bg-[#FAF9F6] hover:border-slate-350'
+                        }`}
+                      >
+                        <span className="block text-xl font-bold text-amber-900 font-mono leading-none">{bookmarkStats.wantToRead}</span>
+                        <span className="text-[9px] uppercase font-bold tracking-wider block mt-1">Disimpan</span>
+                      </div>
+
+                      {/* Dibaca / Sedang Dibaca Tab Button */}
+                      <div 
+                        id="stat-box-dibaca"
+                        onClick={() => setReadingListFilter(readingListFilter === 'sedang_dibaca' ? 'semua' : 'sedang_dibaca')}
+                        title="Saring daftar: Buku Sedang Dibaca"
+                        className={`px-3.5 py-2 rounded-lg border text-center shrink-0 cursor-pointer transition-all select-none ${
+                          readingListFilter === 'sedang_dibaca'
+                            ? 'bg-slate-100 text-slate-950 border-slate-400 shadow-xs ring-2 ring-slate-400/20 font-bold'
+                            : 'bg-white border-lit-border text-slate-500 hover:bg-[#FAF9F6] hover:border-slate-350'
+                        }`}
+                      >
+                        <span className="block text-xl font-bold text-slate-700 font-mono leading-none">{bookmarkStats.readingNow}</span>
+                        <span className="text-[9px] uppercase font-bold tracking-wider block mt-1">Dibaca</span>
+                      </div>
+
+                      {/* Selesai / Selesai Dibaca Tab Button */}
+                      <div 
+                        id="stat-box-selesai"
+                        onClick={() => setReadingListFilter(readingListFilter === 'selesai' ? 'semua' : 'selesai')}
+                        title="Saring daftar: Buku Selesai Dibaca"
+                        className={`px-3.5 py-2 rounded-lg border text-center shrink-0 cursor-pointer transition-all select-none ${
+                          readingListFilter === 'selesai'
+                            ? 'bg-emerald-50 text-emerald-950 border-emerald-350 shadow-xs ring-2 ring-emerald-400/25 font-bold'
+                            : 'bg-white border-lit-border text-slate-500 hover:bg-[#FAF9F6] hover:border-slate-350'
+                        }`}
+                      >
+                        <span className="block text-xl font-bold text-emerald-850 font-mono leading-none">{bookmarkStats.completed}</span>
+                        <span className="text-[9px] uppercase font-bold tracking-wider block mt-1">Selesai</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="bg-white px-3.5 py-2 rounded-lg border border-lit-border text-center shrink-0">
-                      <span className="block text-xl font-bold text-lit-sage font-mono leading-none">{bookmarkStats.total}</span>
-                      <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500 block mt-1">Disimpan</span>
-                    </div>
-
-                    <div className="bg-white px-3.5 py-2 rounded-lg border border-lit-border text-center shrink-0">
-                      <span className="block text-xl font-bold text-slate-700 font-mono leading-none">{bookmarkStats.readingNow}</span>
-                      <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500 block mt-1">Dibaca</span>
-                    </div>
-
-                    <div className="bg-white px-3.5 py-2 rounded-lg border border-lit-border text-center shrink-0">
-                      <span className="block text-xl font-bold text-emerald-850 font-mono leading-none">{bookmarkStats.completed}</span>
-                      <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500 block mt-1">Selesai</span>
-                    </div>
-                  </div>
-                </div>
+                {/* Quick Add Reading Progress Form Widget */}
+                <QuickAddTrackingForm
+                  books={books}
+                  readingList={readingList}
+                  onAddSelectedBook={handleAddSelectedBookToTrack}
+                  onAddCustomBook={handleAddCustomBookToTrack}
+                />
 
                 {/* Bookmark List feeds layout */}
                 {readingList.length === 0 ? (
@@ -1180,16 +1409,56 @@ export default function App() {
                       Ayo Cari Buku Bagus
                     </button>
                   </div>
+                ) : filteredReadingList.length === 0 ? (
+                  <div className="text-center py-16 bg-lit-cream rounded-xl border border-dashed border-lit-border p-6 animate-fade-in shadow-2xs">
+                    <div className="w-14 h-14 bg-white border border-lit-border rounded-lg flex items-center justify-center mx-auto mb-4 text-slate-400 shadow-3xs">
+                      <Bookmark className="w-5 h-5 text-slate-450" />
+                    </div>
+                    {readingListFilter === 'ingin_dibaca' && (
+                      <>
+                        <h4 className="text-base font-serif italic font-bold text-lit-charcoal">Belum Ada Buku yang Disimpan</h4>
+                        <p className="text-slate-500 text-xs mt-1 max-w-sm mx-auto leading-relaxed">
+                          Kembali ke tab <strong>"Jelajah Buku"</strong> dan klik ikon penanda bintang pada buku di katalog untuk menambahkannya ke daftar ingin dibaca.
+                        </p>
+                      </>
+                    )}
+                    {readingListFilter === 'sedang_dibaca' && (
+                      <>
+                        <h4 className="text-base font-serif italic font-bold text-lit-charcoal">Belum Ada Buku yang Sedang Dibaca</h4>
+                        <p className="text-slate-500 text-xs mt-1 max-w-sm mx-auto leading-relaxed">
+                          Ubah status buku Anda dari status <strong>"Ingin Baca"</strong> ke <strong>"Sedang Dibaca"</strong> di bawah untuk mulai melacak halaman terakhir.
+                        </p>
+                      </>
+                    )}
+                    {readingListFilter === 'selesai' && (
+                      <>
+                        <h4 className="text-base font-serif italic font-bold text-lit-charcoal">Belum Ada Buku yang Selesai</h4>
+                        <p className="text-slate-500 text-xs mt-1 max-w-sm mx-auto leading-relaxed">
+                          Selesaikan membaca lembaran buku Anda dan tandai progress Anda sebagai tuntas untuk merayakan pencapaian bacaan Anda disini! 🏆
+                        </p>
+                      </>
+                    )}
+                    <button 
+                      onClick={() => setReadingListFilter('semua')}
+                      className="mt-5 bg-white border border-lit-border hover:bg-slate-50 text-slate-650 font-bold text-xs py-2 px-4 rounded-lg shadow-3xs transition-all cursor-pointer"
+                    >
+                      Tampilkan Semua Daftar Bacaan ({readingList.length})
+                    </button>
+                  </div>
                 ) : (
                   <div className="space-y-4">
-                    {readingList.map(item => {
-                      const book = books.find(b => b.id === item.bookId);
+                    {filteredReadingList.map(item => {
+                      const book = books.find(b => String(b.id) === String(item.bookId));
                       if (!book) return null;
+
+                      const currentPage = item.currentPage || 0;
+                      const totalPages = item.totalPages || book.pages || 0;
+                      const pct = totalPages > 0 ? Math.round((currentPage / totalPages) * 100) : 0;
 
                       return (
                         <div 
                           key={item.bookId}
-                          className={`p-4 rounded-xl border border-lit-border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-3xs ${
+                          className={`p-4 rounded-xl border border-lit-border transition-all flex flex-col gap-4 shadow-3xs ${
                             item.progressStatus === 'selesai' 
                               ? 'bg-emerald-50/15 border-emerald-200' 
                               : item.progressStatus === 'sedang_dibaca'
@@ -1197,91 +1466,198 @@ export default function App() {
                                 : 'bg-white border-lit-border'
                           }`}
                         >
-                          {/* Mini book banner title */}
-                          <div className="flex gap-4 items-center">
-                            <div className={`w-10 h-14 rounded shrink-0 ${book.coverColor} text-white flex flex-col justify-center items-center text-center p-1.5 shadow relative overflow-hidden select-none`}>
-                              <div className="absolute inset-y-0 left-0 w-0.5 bg-gradient-to-r from-black/20 to-transparent" />
-                              <span className="text-[6px] font-bold line-clamp-2 uppercase leading-tight font-serif">{book.title}</span>
+                          {/* Upper Card Control Row */}
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            {/* Mini book banner title */}
+                            <div className="flex gap-4 items-center">
+                              <div className={`w-10 h-14 rounded shrink-0 ${book.coverColor} text-white flex flex-col justify-center items-center text-center p-1.5 shadow relative overflow-hidden select-none`}>
+                                <div className="absolute inset-y-0 left-0 w-0.5 bg-gradient-to-r from-black/20 to-transparent" />
+                                <span className="text-[6px] font-bold line-clamp-2 uppercase leading-tight font-serif">{book.title}</span>
+                              </div>
+                              
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {/* Display status badge colors */}
+                                  <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                                    item.progressStatus === 'selesai'
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                      : item.progressStatus === 'sedang_dibaca'
+                                        ? 'bg-slate-100 text-slate-755 border border-slate-200'
+                                        : 'bg-lit-sage/10 text-lit-sage border border-lit-sage/20'
+                                  }`}>
+                                    {item.progressStatus === 'selesai' ? 'Selesai Dibaca' : item.progressStatus === 'sedang_dibaca' ? 'Sedang Dibaca' : 'Ingin Dibaca'}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 font-medium">Disimpan {item.savedAt}</span>
+                                </div>
+
+                                <h4 className="font-serif font-bold text-lit-charcoal text-sm mt-1.5">{book.title}</h4>
+                                <p className="text-[10px] text-slate-400">oleh {book.author} • {book.category}</p>
+                              </div>
                             </div>
-                            
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                {/* Display status badge colors */}
-                                <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                                  item.progressStatus === 'selesai'
-                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                    : item.progressStatus === 'sedang_dibaca'
-                                      ? 'bg-slate-100 text-slate-755 border border-slate-200'
-                                      : 'bg-lit-sage/10 text-lit-sage border border-lit-sage/20'
-                                }`}>
-                                  {item.progressStatus === 'selesai' ? 'Selesai Dibaca' : item.progressStatus === 'sedang_dibaca' ? 'Sedang Dibaca' : 'Ingin Dibaca'}
-                                </span>
-                                <span className="text-[9px] text-slate-400 font-medium">Disimpan {item.savedAt}</span>
+
+                            {/* Interactive status selectors */}
+                            <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto justify-end">
+                              <div className="flex items-center rounded-lg bg-[#F5F2ED] p-1 border border-lit-border">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateReadingStatus(book.id, 'ingin_dibaca')}
+                                  className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                                    item.progressStatus === 'ingin_dibaca' 
+                                      ? 'bg-white text-lit-sage shadow-3xs' 
+                                      : 'text-slate-500 hover:text-slate-900'
+                                  }`}
+                                >
+                                  Ingin Baca
+                                </button>
+                                
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateReadingStatus(book.id, 'sedang_dibaca')}
+                                  className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                                    item.progressStatus === 'sedang_dibaca' 
+                                      ? 'bg-white text-slate-700 shadow-3xs' 
+                                      : 'text-slate-500 hover:text-slate-900'
+                                  }`}
+                                >
+                                  Dibaca
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateReadingStatus(book.id, 'selesai')}
+                                  className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                                    item.progressStatus === 'selesai' 
+                                      ? 'bg-white text-emerald-850 shadow-3xs' 
+                                      : 'text-slate-500 hover:text-slate-900'
+                                  }`}
+                                >
+                                  Selesai
+                                </button>
                               </div>
 
-                              <h4 className="font-serif font-bold text-lit-charcoal text-sm mt-1.5">{book.title}</h4>
-                              <p className="text-[10px] text-slate-400">oleh {book.author} • {book.category}</p>
-                            </div>
-                          </div>
-
-                          {/* Interactive status selectors */}
-                          <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto justify-end">
-                            <div className="flex items-center rounded-lg bg-[#F5F2ED] p-1 border border-lit-border">
-                              <button
+                              <button 
                                 type="button"
-                                onClick={() => handleUpdateReadingStatus(book.id, 'ingin_dibaca')}
-                                className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
-                                  item.progressStatus === 'ingin_dibaca' 
-                                    ? 'bg-white text-lit-sage shadow-3xs' 
-                                    : 'text-slate-500 hover:text-slate-900'
-                                }`}
+                                onClick={() => setSelectedBook(book)}
+                                className="p-2 bg-[#FAF9F6] border border-lit-border hover:bg-white rounded-lg text-slate-600 transition-colors cursor-pointer flex items-center justify-center h-[30px] w-[30px]"
+                                title="Lihat ulasan detail"
                               >
-                                Ingin Baca
+                                <BookOpen className="w-3.5 h-3.5" />
                               </button>
                               
-                              <button
+                              <button 
                                 type="button"
-                                onClick={() => handleUpdateReadingStatus(book.id, 'sedang_dibaca')}
-                                className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
-                                  item.progressStatus === 'sedang_dibaca' 
-                                    ? 'bg-white text-slate-700 shadow-3xs' 
-                                    : 'text-slate-500 hover:text-slate-900'
-                                }`}
+                                onClick={(e) => handleToggleBookmark(e, book.id)}
+                                className="p-2 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg text-red-650 transition-colors cursor-pointer flex items-center justify-center font-bold text-xs h-[30px] w-[30px]"
+                                title="Hapus dari daftar bacaan"
                               >
-                                Dibaca
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateReadingStatus(book.id, 'selesai')}
-                                className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all cursor-pointer ${
-                                  item.progressStatus === 'selesai' 
-                                    ? 'bg-white text-emerald-850 shadow-3xs' 
-                                    : 'text-slate-500 hover:text-slate-900'
-                                }`}
-                              >
-                                Selesai
+                                ✕
                               </button>
                             </div>
-
-                            <button 
-                              type="button"
-                              onClick={() => setSelectedBook(book)}
-                              className="p-2 bg-[#FAF9F6] border border-lit-border hover:bg-white rounded-lg text-slate-600 transition-colors cursor-pointer flex items-center justify-center h-[30px] w-[30px]"
-                              title="Lihat ulasan detail"
-                            >
-                              <BookOpen className="w-3.5 h-3.5" />
-                            </button>
-                            
-                            <button 
-                              type="button"
-                              onClick={(e) => handleToggleBookmark(e, book.id)}
-                              className="p-2 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg text-red-650 transition-colors cursor-pointer flex items-center justify-center font-bold text-xs h-[30px] w-[30px]"
-                              title="Hapus dari daftar bacaan"
-                            >
-                              ✕
-                            </button>
                           </div>
+
+                          {/* Progress Tracker Sub-Panel */}
+                          {item.progressStatus === 'sedang_dibaca' && (
+                            <div className="border-t border-slate-200/60 pt-3.5 mt-0.5 text-left">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-lit-cream/40 p-3 rounded-xl border border-lit-border/40">
+                                
+                                {/* Tracking Info labels */}
+                                <div>
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Kemajuan Bacaan Saat Ini</span>
+                                  <span className="text-xs text-slate-700 font-medium block mt-1">
+                                    {totalPages > 0 ? (
+                                      <>Membaca halaman <strong className="text-lit-charcoal text-sm">{currentPage}</strong> dari <strong>{totalPages}</strong> ({pct}%)</>
+                                    ) : (
+                                      <>Membaca halaman <strong className="text-lit-charcoal text-sm">{currentPage}</strong> <span className="text-amber-600 text-[10px] font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 ml-1">Masukan total halaman buku</span></>
+                                    )}
+                                  </span>
+                                </div>
+
+                                {/* Tracking Input Actions */}
+                                <div className="flex items-center gap-1.5 flex-wrap self-start sm:self-auto">
+                                  <span className="text-[10px] text-slate-400 font-bold font-mono">Update Halaman:</span>
+                                  
+                                  {/* Decrement */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateReadingProgress(book.id, currentPage - 1, totalPages)}
+                                    disabled={currentPage <= 0}
+                                    className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 disabled:opacity-40 select-none cursor-pointer text-xs font-bold font-mono"
+                                  >
+                                    -
+                                  </button>
+
+                                  {/* Page Input */}
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={totalPages > 0 ? totalPages : undefined}
+                                    value={currentPage || ''}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value) || 0;
+                                      handleUpdateReadingProgress(book.id, val, totalPages);
+                                    }}
+                                    className="w-14 text-center bg-white border border-slate-200 text-xs py-1.5 font-bold rounded-lg font-mono text-slate-805 shadow-3xs"
+                                    placeholder="Hal"
+                                  />
+
+                                  {/* Increment */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateReadingProgress(book.id, currentPage + 1, totalPages)}
+                                    disabled={totalPages > 0 && currentPage >= totalPages}
+                                    className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 disabled:opacity-40 select-none cursor-pointer text-xs font-bold font-mono"
+                                  >
+                                    +
+                                  </button>
+
+                                  <span className="text-slate-400 text-xs font-mono mx-0.5">/</span>
+
+                                  {/* Total Pages Input */}
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={totalPages || ''}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value) || 0;
+                                      handleUpdateReadingProgress(book.id, currentPage, val);
+                                    }}
+                                    className="w-14 text-center bg-white border border-slate-200 text-xs py-1.5 font-bold rounded-lg font-mono text-slate-500 shadow-3xs"
+                                    placeholder="Total"
+                                    title="Tentukan total halaman buku untuk melacak persentase"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Progress bar gauge */}
+                              {totalPages > 0 && (
+                                <div className="w-full bg-slate-100 border border-slate-200/50 h-2.5 rounded-full overflow-hidden mt-2.5 relative shadow-3xs">
+                                  <div 
+                                    className="bg-gradient-to-r from-lit-sage/80 to-lit-sage h-full rounded-full transition-all duration-300 shadow-xs" 
+                                    style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Completed reading state view */}
+                          {item.progressStatus === 'selesai' && (
+                            <div className="border-t border-slate-100/60 pt-3 text-left">
+                              <div className="flex items-center gap-2 text-xs text-emerald-800 font-medium bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                <span>Hebat! Anda telah menyelesaikan buku ini sepenuhnya {totalPages > 0 && `(Total ${totalPages} halaman)`}. 🎓🎉</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Not launched progress state view */}
+                          {item.progressStatus === 'ingin_dibaca' && (
+                            <div className="border-t border-slate-50 pt-2.5 text-left">
+                              <p className="text-[11px] text-slate-400 font-serif italic">
+                                💡 Klik status <strong>"Dibaca"</strong> di atas jika Anda sudah mulai membuka buku ini untuk mengaktifkan pelacak halaman.
+                              </p>
+                            </div>
+                          )}
 
                         </div>
                       );
@@ -1385,7 +1761,7 @@ export default function App() {
         book={selectedBook}
         isOpen={selectedBook !== null}
         onClose={() => setSelectedBook(null)}
-        isSaved={selectedBook ? readingList.some(item => item.bookId === selectedBook.id) : false}
+        isSaved={selectedBook ? readingList.some(item => String(item.bookId) === String(selectedBook.id)) : false}
         onToggleSave={() => selectedBook && handleToggleBookmark(null, selectedBook.id)}
         onSubmitReview={handleAddReview}
         isLoggedIn={!!currentUser}
@@ -1399,7 +1775,7 @@ export default function App() {
         books={books}
         onOpenBookDetail={(book) => setSelectedBook(book)}
         onToggleBookmark={(bookId) => handleToggleBookmark(null, bookId)}
-        isBookSaved={(bookId) => readingList.some(item => item.bookId === bookId)}
+        isBookSaved={(bookId) => readingList.some(item => String(item.bookId) === String(bookId))}
         dynamicCategories={dynamicCategories}
       />
 
@@ -1582,11 +1958,6 @@ export default function App() {
           {/* Copyright legal stuff */}
           <div className="border-t border-lit-border/30 mt-8 pt-8 text-center md:flex md:items-center md:justify-between text-xs text-slate-400/60">
             <p>&copy; 2026 ReadBooks. Dibuat dengan dedikasi untuk seluruh pencinta buku di Indonesia.</p>
-            <div className="flex justify-center space-x-4 mt-4 md:mt-0">
-              <a href="#" className="hover:text-white transition-colors"><Instagram className="w-4 h-4" /></a>
-              <a href="#" className="hover:text-white transition-colors"><Twitter className="w-4 h-4" /></a>
-              <a href="#" className="hover:text-white transition-colors"><Github className="w-4 h-4" /></a>
-            </div>
           </div>
 
         </div>

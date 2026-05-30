@@ -28,4 +28,6 @@ export interface ReadingListItem {
   notes?: string;
   savedAt: string;
   userId?: string;
+  currentPage?: number;
+  totalPages?: number;
 }

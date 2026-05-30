@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword, 
   updateProfile,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { X, Mail, Lock, User, LogIn, UserPlus, Loader2, Eye, EyeOff } from 'lucide-react';
@@ -24,6 +25,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, triggerTo
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   
   // Loading & error status
   const [loading, setLoading] = useState(false);
@@ -133,6 +135,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, triggerTo
     }
   };
 
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setErrorMsg('Format email tidak valid.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      triggerToast(`Email pemulihan kata sandi telah dikirim ke ${email.trim()}. Silakan periksa kotak masuk atau folder spam Anda. ✉️`);
+      setIsResetting(false);
+    } catch (err: any) {
+      console.error("Password Reset Error:", err);
+      let friendlyMessage = 'Terjadi kesalahan saat mengirim email reset.';
+      
+      switch (err.code) {
+        case 'auth/user-not-found':
+          friendlyMessage = 'Alamat email ini tidak terdaftar di sistem kami.';
+          break;
+        case 'auth/invalid-email':
+          friendlyMessage = 'Alamat email tidak valid.';
+          break;
+        default:
+          if (err.message) {
+            friendlyMessage = err.message;
+          }
+      }
+      setErrorMsg(friendlyMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-lit-charcoal/45 backdrop-blur-xs transition-all duration-300">
       <div 
@@ -144,7 +184,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, triggerTo
         {/* Modal Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-lit-cream/30">
           <h3 className="font-serif font-bold text-lg text-lit-charcoal">
-            {activeTab === 'login' ? 'Masuk ke ReadBooks' : 'Buat Akun Membaca Baru'}
+            {isResetting 
+              ? 'Atur Ulang Kata Sandi' 
+              : activeTab === 'login' 
+                ? 'Masuk ke ReadBooks' 
+                : 'Buat Akun Membaca Baru'}
           </h3>
           <button
             onClick={onClose}
@@ -158,7 +202,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, triggerTo
         {/* Modal Body */}
         <div className="p-6 space-y-5">
           {/* Tabs switch */}
-          <div className="flex bg-slate-100 p-1 rounded-xl">
+          {!isResetting && (
+            <div className="flex bg-slate-100 p-1 rounded-xl">
             <button
               onClick={() => {
                 setActiveTab('login');
@@ -190,6 +235,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, triggerTo
               <span>Daftar Akun</span>
             </button>
           </div>
+          )}
 
           {/* Error Message Box */}
           {errorMsg && (
@@ -199,114 +245,192 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, triggerTo
           )}
 
           {/* Form */}
-          <form onSubmit={handleManualAuth} className="space-y-4">
-            {activeTab === 'register' && (
+          {isResetting ? (
+            <form onSubmit={handlePasswordReset} className="space-y-4">
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Masukkan alamat email yang terdaftar pada akun Anda. Kami akan mengirimkan tautan untuk mengatur ulang kata sandi Anda.
+              </p>
+              
               <div className="space-y-1.5">
-                <label className="text-slate-600 text-xs font-semibold block">Nama Lengkap</label>
+                <label className="text-slate-600 text-xs font-semibold block">Alamat Email</label>
                 <div className="relative">
-                  <User className="absolute left-3.5 top-2.5 w-4.5 h-4.5 text-slate-400" />
+                  <Mail className="absolute left-3.5 top-2.5 w-4.5 h-4.5 text-slate-400" />
                   <input
-                    type="text"
+                    type="email"
                     required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Contoh: Budi Santoso"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@email.com"
                     disabled={loading}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-lit-sage/50 focus:bg-white rounded-xl py-2 px-3 pl-10 text-xs text-slate-805 outline-hidden transition-all"
-                    id="input-auth-name"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-lit-sage/50 focus:bg-white rounded-xl py-2 px-3 pl-10 text-xs text-slate-850 outline-hidden transition-all"
+                    id="input-reset-email"
                   />
                 </div>
               </div>
-            )}
 
-            <div className="space-y-1.5">
-              <label className="text-slate-600 text-xs font-semibold block">Alamat Email</label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-2.5 w-4.5 h-4.5 text-slate-400" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@email.com"
-                  disabled={loading}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-lit-sage/50 focus:bg-white rounded-xl py-2 px-3 pl-10 text-xs text-slate-850 outline-hidden transition-all"
-                  id="input-auth-email"
-                />
+              {/* Spam Box warning notice */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-850 leading-relaxed font-medium">
+                <strong>💡 Catatan Penting:</strong> Email pengaturan ulang kata sandi dikirimkan secara otomatis. Jika Anda belum menerimanya dalam 1-2 menit, <strong>silakan periksa folder Spam Anda</strong> serta pastikan pengetikan alamat email sudah benar.
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-slate-600 text-xs font-semibold block">Kata Sandi</label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-2.5 w-4.5 h-4.5 text-slate-400" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min. 6 karakter"
-                  disabled={loading}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-lit-sage/50 focus:bg-white rounded-xl py-2 px-3 pl-10 pr-10 text-xs text-slate-850 outline-hidden transition-all"
-                  id="input-auth-password"
-                />
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 px-4 bg-lit-sage hover:opacity-95 text-white font-bold rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:bg-slate-350"
+                id="submit-reset-btn"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Sedang Mengirim...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4" />
+                    <span>Kirim Tautan Reset</span>
+                  </>
+                )}
+              </button>
+
+              <div className="text-center pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 p-0.5 text-slate-400 hover:text-slate-600 focus:outline-hidden transition-colors cursor-pointer"
-                  title={showPassword ? "Sembunyikan Kata Sandi" : "Tampilkan Kata Sandi"}
+                  onClick={() => {
+                    setIsResetting(false);
+                    setErrorMsg('');
+                  }}
+                  className="text-xs text-slate-500 hover:text-lit-charcoal font-semibold underline cursor-pointer"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
+                  Kembali ke Halaman Masuk
                 </button>
               </div>
-            </div>
+            </form>
+          ) : (
+            <>
+              <form onSubmit={handleManualAuth} className="space-y-4">
+                {activeTab === 'register' && (
+                  <div className="space-y-1.5">
+                    <label className="text-slate-600 text-xs font-semibold block">Nama Lengkap</label>
+                    <div className="relative">
+                      <User className="absolute left-3.5 top-2.5 w-4.5 h-4.5 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Contoh: Budi Santoso"
+                        disabled={loading}
+                        className="w-full bg-slate-50 border border-slate-200 focus:border-lit-sage/50 focus:bg-white rounded-xl py-2 px-3 pl-10 text-xs text-slate-805 outline-hidden transition-all"
+                        id="input-auth-name"
+                      />
+                    </div>
+                  </div>
+                )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 px-4 bg-lit-sage hover:opacity-95 text-white font-bold rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:bg-slate-350"
-              id="submit-auth-btn"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  <span>Sedang Diproses...</span>
-                </>
-              ) : (
-                <>
-                  {activeTab === 'login' ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                  <span>{activeTab === 'login' ? 'Masuk Sekarang' : 'Daftar Akun'}</span>
-                </>
-              )}
-            </button>
-          </form>
+                <div className="space-y-1.5">
+                  <label className="text-slate-600 text-xs font-semibold block">Alamat Email</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-2.5 w-4.5 h-4.5 text-slate-400" />
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@email.com"
+                      disabled={loading}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-lit-sage/50 focus:bg-white rounded-xl py-2 px-3 pl-10 text-xs text-slate-850 outline-hidden transition-all"
+                      id="input-auth-email"
+                    />
+                  </div>
+                </div>
 
-          {/* Social Divider */}
-          <div className="relative flex py-2 items-center">
-            <div className="flex-grow border-t border-slate-100"></div>
-            <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-mono tracking-wider uppercase">atau</span>
-            <div className="flex-grow border-t border-slate-100"></div>
-          </div>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center bg-transparent">
+                    <label className="text-slate-600 text-xs font-semibold block">Kata Sandi</label>
+                    {activeTab === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsResetting(true);
+                          setErrorMsg('');
+                        }}
+                        className="text-[11px] text-lit-sage hover:underline font-semibold cursor-pointer py-0.5 bg-transparent border-0"
+                      >
+                        Lupa Kata Sandi?
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-2.5 w-4.5 h-4.5 text-slate-400" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min. 6 karakter"
+                      disabled={loading}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-lit-sage/50 focus:bg-white rounded-xl py-2 px-3 pl-10 pr-10 text-xs text-slate-850 outline-hidden transition-all"
+                      id="input-auth-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-2.5 p-0.5 text-slate-400 hover:text-slate-600 focus:outline-hidden transition-colors cursor-pointer"
+                      title={showPassword ? "Sembunyikan Kata Sandi" : "Tampilkan Kata Sandi"}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
 
-          {/* Google SSO Login option */}
-          <button
-            onClick={handleGoogleLoginInner}
-            disabled={loading}
-            className="w-full bg-white hover:bg-slate-50 text-slate-750 border border-slate-205 rounded-xl py-2 px-4 text-xs font-bold shadow-2xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-            id="google-sso-auth-btn"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
-            </svg>
-            <span>Masuk dengan Google</span>
-          </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 px-4 bg-lit-sage hover:opacity-95 text-white font-bold rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:bg-slate-350"
+                  id="submit-auth-btn"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Sedang Diproses...</span>
+                    </>
+                  ) : (
+                    <>
+                      {activeTab === 'login' ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                      <span>{activeTab === 'login' ? 'Masuk Sekarang' : 'Daftar Akun'}</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Social Divider */}
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-100"></div>
+                <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-mono tracking-wider uppercase">atau</span>
+                <div className="flex-grow border-t border-slate-100"></div>
+              </div>
+
+              {/* Google SSO Login option */}
+              <button
+                onClick={handleGoogleLoginInner}
+                disabled={loading}
+                className="w-full bg-white hover:bg-slate-50 text-slate-750 border border-slate-205 rounded-xl py-2 px-4 text-xs font-bold shadow-2xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                id="google-sso-auth-btn"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                </svg>
+                <span>Masuk dengan Google</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* Modal Info Footer */}

@@ -66,7 +66,7 @@ service cloud.firestore {
 
     function isValidReadingListItem(data) {
       return data.keys().hasAll(['bookId', 'progressStatus', 'savedAt', 'userId'])
-        && data.keys().size() <= 8
+        && data.keys().size() <= 10
         && data.bookId is string
         && data.bookId.size() <= 128
         && data.progressStatus is string
@@ -74,7 +74,9 @@ service cloud.firestore {
         && data.savedAt is string
         && data.savedAt.size() <= 50
         && data.userId == request.auth.uid
-        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 5000));
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 5000))
+        && (!('currentPage' in data) || (data.currentPage is int && data.currentPage >= 0))
+        && (!('totalPages' in data) || (data.totalPages is int && data.totalPages >= 0));
     }
 
     function isValidNotepad(data) {
