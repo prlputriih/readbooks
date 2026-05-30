@@ -5,6 +5,7 @@ import { BookDetailModal } from './components/BookDetailModal';
 import { AiRecommendationPanel } from './components/AiRecommendationPanel';
 import { AddBookForm } from './components/AddBookForm';
 import { AuthModal } from './components/AuthModal';
+import { ShuffleModal } from './components/ShuffleModal';
 import { 
   BookOpen, 
   Compass, 
@@ -466,6 +467,7 @@ export default function App() {
 
   // Loading indicator for "Kocok Rekomendasi" (Surprise Me)
   const [shuffling, setShuffling] = useState(false);
+  const [showShuffleModal, setShowShuffleModal] = useState(false);
 
   // Dynamic inside Toast message queue
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -650,6 +652,16 @@ export default function App() {
     };
   }, [readingList]);
 
+  // Dynamic categories list based on existing books in the catalog
+  const dynamicCategories = useMemo(() => {
+    const defaultCats = ['Semua', 'Fiksi', 'Pengembangan Diri', 'Bisnis', 'Sains & Teknologi'];
+    const customCats = books
+      .map(b => b.category)
+      .filter((cat): cat is string => typeof cat === 'string' && cat.trim() !== '' && cat !== 'Semua' && !defaultCats.includes(cat));
+    const uniqueCustom = Array.from(new Set(customCats));
+    return [...defaultCats, ...uniqueCustom];
+  }, [books]);
+
   // Catalog filtering calculation
   const filteredCatalog = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
@@ -665,20 +677,13 @@ export default function App() {
     });
   }, [books, searchQuery, selectedCategory]);
 
-  // Rolling the dice custom surprise me book selector
+  // Open the dedicated interactive shuffle modal
   const handleSurpriseRoll = () => {
-    if (books.length === 0) return;
-    setShuffling(true);
-
-    triggerToast("🎲 Memutar dadu literasi mencari buku istimewa...");
-
-    setTimeout(() => {
-      const randomIndex = Math.floor(Math.random() * books.length);
-      const chosenBook = books[randomIndex];
-      setShuffling(false);
-      setSelectedBook(chosenBook);
-      triggerToast(`Menyarankan: "${chosenBook.title}"`);
-    }, 1000);
+    if (books.length === 0) {
+      triggerToast("Katalog buku sedang kosong. Silakan tambahkan beberapa buku terlebih dahulu!");
+      return;
+    }
+    setShowShuffleModal(true);
   };
 
   // Scroll smooth anchor
@@ -1037,7 +1042,7 @@ export default function App() {
 
                 {/* Filter Pills pills for book classification */}
                 <div className="lg:col-span-8 flex flex-wrap gap-2 justify-start lg:justify-end">
-                  {['Semua', 'Fiksi', 'Pengembangan Diri', 'Bisnis', 'Sains & Teknologi'].map((cat) => (
+                  {dynamicCategories.map((cat) => (
                     <button
                       key={cat}
                       type="button"
@@ -1385,6 +1390,17 @@ export default function App() {
         onSubmitReview={handleAddReview}
         isLoggedIn={!!currentUser}
         onTriggerAuth={() => setShowAuthModal(true)}
+      />
+
+      {/* Interactive Literature Dice Roll Modal */}
+      <ShuffleModal
+        isOpen={showShuffleModal}
+        onClose={() => setShowShuffleModal(false)}
+        books={books}
+        onOpenBookDetail={(book) => setSelectedBook(book)}
+        onToggleBookmark={(bookId) => handleToggleBookmark(null, bookId)}
+        isBookSaved={(bookId) => readingList.some(item => item.bookId === bookId)}
+        dynamicCategories={dynamicCategories}
       />
 
       {/* Auth Account Manual & Google Registration / Login Dialog Modal */}

@@ -6,7 +6,7 @@ interface AddBookFormProps {
   onAddBook: (book: Book) => void;
 }
 
-const CATEGORIES = ['Fiksi', 'Pengembangan Diri', 'Bisnis', 'Sains & Teknologi'];
+const CATEGORIES = ['Fiksi', 'Pengembangan Diri', 'Bisnis', 'Sains & Teknologi', 'Lainnya'];
 
 const MOODS_THEMES = [
   { name: 'Kuning Hangat / Cozy', class: 'bg-amber-900' },
@@ -23,6 +23,7 @@ export const AddBookForm: React.FC<AddBookFormProps> = ({ onAddBook }) => {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [category, setCategory] = useState('Fiksi');
+  const [customCategory, setCustomCategory] = useState('');
   const [pages, setPages] = useState<number>(250);
   const [duration, setDuration] = useState('4 jam');
   const [synopsis, setSynopsis] = useState('');
@@ -37,12 +38,19 @@ export const AddBookForm: React.FC<AddBookFormProps> = ({ onAddBook }) => {
       return;
     }
 
+    if (category === 'Lainnya' && !customCategory.trim()) {
+      setErrorMsg('Harap isi jenis kategori buatan Anda sendiri.');
+      return;
+    }
+
+    const finalCategory = category === 'Lainnya' ? customCategory.trim() : category;
+
     const newBookId = `custom-${Date.now()}`;
     const newBook: Book = {
       id: newBookId,
       title: title.trim(),
       author: author.trim(),
-      category,
+      category: finalCategory,
       rating: 0,
       reviewsCount: 0,
       reviews: [],
@@ -59,6 +67,7 @@ export const AddBookForm: React.FC<AddBookFormProps> = ({ onAddBook }) => {
     setTitle('');
     setAuthor('');
     setCategory('Fiksi');
+    setCustomCategory('');
     setPages(250);
     setDuration('4 jam');
     setSynopsis('');
@@ -139,6 +148,17 @@ export const AddBookForm: React.FC<AddBookFormProps> = ({ onAddBook }) => {
                     </button>
                   ))}
                 </div>
+                {category === 'Lainnya' && (
+                  <div className="mt-2 text-left animate-fade-in">
+                    <input
+                      type="text"
+                      placeholder="Tulis kategori baru buatanmu..."
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      className="w-full text-xs p-2.5 bg-[#FAF9F6] border border-lit-border rounded-lg focus:ring-1 focus:ring-lit-sage outline-none transition-all placeholder:text-gray-400 font-medium"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
